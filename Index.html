@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js');
+    });
+  }
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Canasta Scoresheet (4 Teams)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            height: 100vh;
+            overflow-x: hidden;
+            overscroll-behavior-y: none;
+        }
+        
+        .sticky-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10000;
+            background-color: #f5f5f5;
+            padding: 5px; 
+            border-bottom: 1px solid #ddd;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            height: 115px; 
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+        }
+        
+        .container {
+            max-width: 100%;
+            padding: 125px 10px 5px 10px; 
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type=number] { -moz-appearance: textfield; }
+
+        #save-status {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 10px;
+            color: #4CAF50;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 10005;
+        }
+
+        .team-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 6px;
+            padding: 3px;
+        }
+        .tab {
+            flex: 1;
+            padding: 8px 2px; 
+            border: none;
+            background: #e0e0e0;
+            font-size: 13px; /* Slightly smaller to fit 4 tabs */
+            font-weight: bold;
+            border-radius: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tab.active { background: #4CAF50; color: white; }
+
+        .team-name-section {
+            background: white;
+            padding: 5px 8px; 
+            border-radius: 6px;
+            display: flex; 
+            align-items: center;
+            gap: 10px;
+        }
+        .team-name-section label { font-size: 12px; font-weight: bold; color: #666; white-space: nowrap; }
+        .team-name-section input {
+            flex: 1;
+            padding: 5px;
+            font-size: 14px;
+            border: 1px solid #ddd; 
+            border-radius: 4px;
+            height: 30px;
+        }
+
+        .rounds-container { display: none; }
+        .rounds-container.active { display: block; }
+        
+        .round-card {
+            background: white;
+            padding: 10px; 
+            margin-bottom: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 2px solid transparent;
+        }
+        
+        .round-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #4CAF50;
+        }
+        .round-number { font-size: 15px; font-weight: bold; color: #4CAF50; }
+        .opening-req { font-size: 12px; font-weight: bold; color: #f44336; }
+
+        .input-grid { display: grid; gap: 6px; }
+        .input-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+        .input-group { display: flex; flex-direction: column; align-items: center; }
+        
+        .input-group label { 
+            font-size: 9px; 
+            font-weight: 600; 
+            margin-bottom: 2px; 
+            color: #555; 
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 6px 2px;
+            font-size: 14px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .input-group input:focus { outline: none; border-color: #4CAF50; background-color: #f0fff0; }
+        .input-group input:disabled { background-color: #d1d1d1 !important; color: #888; border-color: #ccc; opacity: 0.7; }
+        .input-group input[readonly] { background-color: #fff9e6; font-weight: bold; border-color: #ffd54f; }
+
+        .score-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px;
+            margin-top: 5px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 4px; 
+            display: flex;
+            gap: 5px;
+            z-index: 1000;
+        }
+        .btn { flex: 1; padding: 6px; font-size: 11px; font-weight: bold; border: none; border-radius: 4px; }
+        .btn-clear { background: #f44336; color: white; }
+        .btn-print { background: #2196F3; color: white; }
+        .bottom-spacer { height: 60px; }
+    </style>
+</head>
+<body>
+    <div class="sticky-header" id="main-header">
+        <div id="save-status">Saved ✓</div>
+        <div class="team-tabs">
+            <button class="tab active" id="tab-1" onclick="switchTeam(1)">Team 1</button>
+            <button class="tab" id="tab-2" onclick="switchTeam(2)">Team 2</button>
+            <button class="tab" id="tab-3" onclick="switchTeam(3)">Team 3</button>
+            <button class="tab" id="tab-4" onclick="switchTeam(4)">Team 4</button>
+        </div>
+        
+        <div id="team1-name-box" class="team-name-section">
+            <label>Team 1 Name</label>
+            <input type="text" id="teamName1" placeholder="Enter name" oninput="saveToStorage()">
+        </div>
+        <div id="team2-name-box" class="team-name-section" style="display: none;">
+            <label>Team 2 Name</label>
+            <input type="text" id="teamName2" placeholder="Enter name" oninput="saveToStorage()">
+        </div>
+        <div id="team3-name-box" class="team-name-section" style="display: none;">
+            <label>Team 3 Name</label>
+            <input type="text" id="teamName3" placeholder="Enter name" oninput="saveToStorage()">
+        </div>
+        <div id="team4-name-box" class="team-name-section" style="display: none;">
+            <label>Team 4 Name</label>
+            <input type="text" id="teamName4" placeholder="Enter name" oninput="saveToStorage()">
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="team1-container" class="rounds-container active"><div id="team1-rounds"></div></div>
+        <div id="team2-container" class="rounds-container"><div id="team2-rounds"></div></div>
+        <div id="team3-container" class="rounds-container"><div id="team3-rounds"></div></div>
+        <div id="team4-container" class="rounds-container"><div id="team4-rounds"></div></div>
+        <div class="bottom-spacer"></div>
+    </div>
+    
+    <div class="controls" id="bottom-controls">
+        <button class="btn btn-clear" onclick="clearData()">Clear All</button>
+        <button class="btn btn-print" onclick="window.print()">Print</button>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'canasta_mobile_save_v4teams';
+        let saveTimeout;
+        const colOrder = ['hand', 'going', 'bonus', 'red3', 'natural', 'mixed', 'meld'];
+        const TOTAL_TEAMS = 4;
+
+        if (window.visualViewport) {
+            const header = document.getElementById('main-header');
+            const updateHeader = () => {
+                header.style.top = window.visualViewport.offsetTop + 'px';
+            };
+            window.visualViewport.addEventListener('scroll', updateHeader);
+            window.visualViewport.addEventListener('resize', updateHeader);
+        }
+
+        function createRoundCard(team, round) {
+            return `
+                <div class="round-card" id="card-${team}-${round}">
+                    <div class="round-header">
+                        <span class="round-number">Round ${round}</span>
+                        <span class="opening-req" id="opening-${team}-${round}">${round === 1 ? 'Opening: 50' : ''}</span>
+                    </div>
+                    <div class="input-grid">
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label>Hand Value</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="hand" inputmode="numeric">
+                            </div>
+                            <div class="input-group">
+                                <label>Going Out</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="going" inputmode="numeric" placeholder="Enter 1">
+                            </div>
+                            <div class="input-group">
+                                <label>Concealed</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="bonus" inputmode="numeric" placeholder="Enter 1">
+                            </div>
+                        </div>
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label>Red 3's</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="red3" inputmode="numeric">
+                            </div>
+                            <div class="input-group">
+                                <label>Natural</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="natural" inputmode="numeric">
+                            </div>
+                            <div class="input-group">
+                                <label>Mixed</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="mixed" inputmode="numeric">
+                            </div>
+                        </div>
+                        <div class="input-row">
+                            <div class="input-group">
+                                <label>Meld Value</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="meld" inputmode="numeric">
+                            </div>
+                            <div class="input-group">
+                                <label>Subtotal</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="subtotal" readonly tabindex="-1">
+                            </div>
+                            <div class="input-group">
+                                <label>Total</label>
+                                <input type="number" data-team="${team}" data-round="${round}" data-col="total" readonly tabindex="-1">
+                            </div>
+                        </div>
+                        <div class="score-display">
+                            <input type="number" data-team="${team}" data-round="${round}" data-col="score" readonly tabindex="-1" style="border: none; background: transparent; color: white; text-align: center; font-size: 22px; font-weight: bold; width: 100%;">
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // NAVIGATION LOGIC
+        document.addEventListener('keydown', function(e) {
+            if (!e.target.dataset.team) return;
+            const team = e.target.dataset.team;
+            const round = parseInt(e.target.dataset.round);
+            const col = e.target.dataset.col;
+            let nR = round, nC = col;
+            const idx = colOrder.indexOf(col);
+
+            if (e.key === 'Enter' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (idx < colOrder.length - 1) nC = colOrder[idx+1];
+                else if (round < 14) { nR = round + 1; nC = colOrder[0]; }
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (idx > 0) nC = colOrder[idx-1];
+                else if (round > 1) { nR = round - 1; nC = colOrder[colOrder.length-1]; }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault(); if (round < 14) nR = round + 1;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault(); if (round > 1) nR = round - 1;
+            } else return;
+
+            let next = document.querySelector(`input[data-team="${team}"][data-round="${nR}"][data-col="${nC}"]`);
+            while (next && next.disabled) {
+                const curIdx = colOrder.indexOf(nC);
+                if (curIdx < colOrder.length - 1) nC = colOrder[curIdx + 1];
+                else if (nR < 14) { nR++; nC = colOrder[0]; }
+                else break;
+                next = document.querySelector(`input[data-team="${team}"][data-round="${nR}"][data-col="${nC}"]`);
+            }
+            if (next) next.focus();
+        });
+
+        function switchTeam(team) {
+            const currentScroll = window.scrollY;
+            document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i + 1 === team));
+            
+            for(let i=1; i<=TOTAL_TEAMS; i++) {
+                document.getElementById(`team${i}-container`).classList.toggle('active', team === i);
+                document.getElementById(`team${i}-name-box`).style.display = (team === i) ? 'flex' : 'none';
+            }
+            
+            window.scrollTo(0, currentScroll);
+        }
+
+        function initializeRounds() {
+            for (let t = 1; t <= TOTAL_TEAMS; t++) {
+                const container = document.getElementById(`team${t}-rounds`);
+                container.innerHTML = '';
+                for (let i = 1; i <= 14; i++) {
+                    container.innerHTML += createRoundCard(t, i);
+                }
+            }
+        }
+
+        function calculateRow(team, round, shouldChain = true) {
+            const inputs = document.querySelectorAll(`input[data-team="${team}"][data-round="${round}"]`);
+            const v = {};
+            inputs.forEach(input => { v[input.dataset.col] = parseFloat(input.value) || 0; });
+
+            let red3Value = 0;
+            if (v.red3 > 0) {
+                const map = {1:100, 2:200, 3:300, 4:800};
+                red3Value = map[v.red3] || (900 + (v.red3 - 5) * 100);
+                if (v.natural === 0 && v.mixed === 0 && v.meld === 0) red3Value = -red3Value;
+            }
+
+            const subtotal = (v.going === 1 ? 100 : 0) + (v.bonus === 1 ? 200 : 0) + red3Value + (v.natural * 500) + (v.mixed * 300) + v.meld;
+            const total = subtotal - v.hand;
+            const hasVal = v.hand !== 0 || v.going !== 0 || v.red3 !== 0 || v.natural !== 0 || v.mixed !== 0 || v.meld !== 0 || v.bonus !== 0;
+            
+            let prevScore = 0;
+            if (round > 1) {
+                prevScore = parseFloat(document.querySelector(`input[data-team="${team}"][data-round="${round-1}"][data-col="score"]`)?.value) || 0;
+            }
+            const currentScore = prevScore + total;
+
+            document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="subtotal"]`).value = hasVal ? subtotal : '';
+            document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="total"]`).value = hasVal ? total : '';
+            document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="score"]`).value = hasVal ? currentScore : '';
+
+            const nextRound = parseInt(round) + 1;
+            const nextCell = document.getElementById(`opening-${team}-${nextRound}`);
+            if (nextCell) {
+                let op = "";
+                if (hasVal) {
+                    if (currentScore < 0) op = "Opening: 15";
+                    else if (currentScore < 1500) op = "Opening: 50";
+                    else if (currentScore < 3000) op = "Opening: 90";
+                    else op = "Opening: 120";
+                }
+                nextCell.innerText = op;
+            }
+            if (shouldChain && parseInt(round) < 14) calculateRow(team, parseInt(round) + 1);
+        }
+
+        document.addEventListener('input', function(e) {
+            if (e.target.dataset.team) {
+                const team = e.target.dataset.team;
+                const round = e.target.dataset.round;
+                const col = e.target.dataset.col;
+
+                const thisGoing = document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="going"]`);
+                const thisBonus = document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="bonus"]`);
+                const thisHand = document.querySelector(`input[data-team="${team}"][data-round="${round}"][data-col="hand"]`);
+
+                // Enforce binary 1 or nothing for logic flags
+                if ((col === 'going' || col === 'bonus') && e.target.value !== '' && e.target.value !== '1') e.target.value = '';
+                
+                // Mutual exclusion for Going Out vs Concealed within same team
+                if (col === 'going') thisBonus.disabled = (e.target.value === '1');
+                if (col === 'bonus') thisGoing.disabled = (e.target.value === '1');
+                
+                // If hand has value, going/bonus logic might change (basic validation)
+                if (col === 'hand') { 
+                    thisGoing.disabled = (e.target.value !== ''); 
+                    thisBonus.disabled = (e.target.value !== ''); 
+                }
+                if (col === 'going' || col === 'bonus') { 
+                    thisHand.disabled = (thisGoing.value === '1' || thisBonus.value === '1'); 
+                }
+
+                // Check if THIS team has gone out
+                const thisHasExit = (thisGoing.value === '1' || thisBonus.value === '1');
+
+                // Loop through all OTHER teams to disable/enable their "Going Out" capabilities
+                for (let t = 1; t <= TOTAL_TEAMS; t++) {
+                    if (t == team) continue; // Skip self
+                    
+                    const otherGoing = document.querySelector(`input[data-team="${t}"][data-round="${round}"][data-col="going"]`);
+                    const otherBonus = document.querySelector(`input[data-team="${t}"][data-round="${round}"][data-col="bonus"]`);
+                    
+                    if (otherGoing) otherGoing.disabled = thisHasExit;
+                    if (otherBonus) otherBonus.disabled = thisHasExit;
+                }
+
+                calculateRow(team, round);
+                saveToStorage();
+            }
+        });
+
+        function saveToStorage() {
+            const status = document.getElementById('save-status');
+            status.style.opacity = '1';
+            clearTimeout(saveTimeout);
+            
+            const data = {
+                t1N: document.getElementById('teamName1').value,
+                t2N: document.getElementById('teamName2').value,
+                t3N: document.getElementById('teamName3').value,
+                t4N: document.getElementById('teamName4').value,
+                inputs: Array.from(document.querySelectorAll('input[data-team]')).map(i => ({
+                    t: i.dataset.team, r: i.dataset.round, c: i.dataset.col, v: i.value, d: i.disabled
+                }))
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            saveTimeout = setTimeout(() => status.style.opacity = '0', 1000);
+        }
+
+        function loadFromStorage() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+            const data = JSON.parse(saved);
+            
+            document.getElementById('teamName1').value = data.t1N || '';
+            document.getElementById('teamName2').value = data.t2N || '';
+            document.getElementById('teamName3').value = data.t3N || '';
+            document.getElementById('teamName4').value = data.t4N || '';
+            
+            data.inputs.forEach(item => {
+                const el = document.querySelector(`input[data-team="${item.t}"][data-round="${item.r}"][data-col="${item.c}"]`);
+                if (el) { el.value = item.v; el.disabled = item.d; }
+            });
+            
+            // Recalculate all rows for all teams
+            for(let r=1; r<=14; r++) { 
+                for(let t=1; t<=TOTAL_TEAMS; t++) {
+                    calculateRow(t.toString(), r, false); 
+                }
+            }
+        }
+
+        function clearData() {
+            if (confirm("Permanently clear all scores?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); }
+        }
+
+        initializeRounds();
+        loadFromStorage();
+    </script>
+</body>
+</html>
