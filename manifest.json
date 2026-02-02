@@ -1,5 +1,5 @@
 {
-  "name": "My Canasta Scorecard",
+  "name": "Canasta Scorecard",
   "short_name": "Canasta Scorecard",
   "start_url": "index.html",
   "scope": "./",
@@ -19,4 +19,5 @@
     }
   ]
 }
+
 
