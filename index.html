@@ -194,19 +194,19 @@
         
         <div id="team1-name-box" class="team-name-section">
             <label>Team 1 Name</label>
-            <input type="text" id="teamName1" placeholder="Enter name" oninput="saveToStorage()">
+            <input type="text" id="teamName1" placeholder="Enter name" oninput="updateInputRestrictions(); saveToStorage()">
         </div>
         <div id="team2-name-box" class="team-name-section" style="display: none;">
             <label>Team 2 Name</label>
-            <input type="text" id="teamName2" placeholder="Enter name" oninput="saveToStorage()">
+            <input type="text" id="teamName2" placeholder="Enter name" oninput="updateInputRestrictions(); saveToStorage()">
         </div>
         <div id="team3-name-box" class="team-name-section" style="display: none;">
             <label>Team 3 Name</label>
-            <input type="text" id="teamName3" placeholder="Enter name" oninput="saveToStorage()">
+            <input type="text" id="teamName3" placeholder="Enter name" oninput="updateInputRestrictions(); saveToStorage()">
         </div>
         <div id="team4-name-box" class="team-name-section" style="display: none;">
             <label>Team 4 Name</label>
-            <input type="text" id="teamName4" placeholder="Enter name" oninput="saveToStorage()">
+            <input type="text" id="teamName4" placeholder="Enter name" oninput="updateInputRestrictions(); saveToStorage()">
         </div>
     </div>
 
@@ -349,6 +349,18 @@
                     container.innerHTML += createRoundCard(t, i);
                 }
             }
+            updateInputRestrictions();
+        }
+
+        function updateInputRestrictions() {
+            for (let t = 1; t <= TOTAL_TEAMS; t++) {
+                const name = document.getElementById(`teamName${t}`).value.trim();
+                const inputs = document.querySelectorAll(`input[data-team="${t}"]:not([readonly])`);
+                inputs.forEach(input => {
+                    input.disabled = (name === '');
+                    if (name === '') input.value = ''; 
+                });
+            }
         }
 
         function calculateRow(team, round, shouldChain = true) {
@@ -427,9 +439,10 @@
                     
                     const otherGoing = document.querySelector(`input[data-team="${t}"][data-round="${round}"][data-col="going"]`);
                     const otherBonus = document.querySelector(`input[data-team="${t}"][data-round="${round}"][data-col="bonus"]`);
+                    const otherTeamName = document.getElementById(`teamName${t}`).value.trim();
                     
-                    if (otherGoing) otherGoing.disabled = thisHasExit;
-                    if (otherBonus) otherBonus.disabled = thisHasExit;
+                    if (otherGoing && otherTeamName !== '') otherGoing.disabled = thisHasExit;
+                    if (otherBonus && otherTeamName !== '') otherBonus.disabled = thisHasExit;
                 }
 
                 calculateRow(team, round);
@@ -465,9 +478,11 @@
             document.getElementById('teamName3').value = data.t3N || '';
             document.getElementById('teamName4').value = data.t4N || '';
             
+            updateInputRestrictions();
+
             data.inputs.forEach(item => {
                 const el = document.querySelector(`input[data-team="${item.t}"][data-round="${item.r}"][data-col="${item.c}"]`);
-                if (el) { el.value = item.v; el.disabled = item.d; }
+                if (el) { el.value = item.v; if(!el.readOnly) el.disabled = item.d; }
             });
             
             // Recalculate all rows for all teams
